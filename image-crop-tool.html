@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像切り抜きツール</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            opacity: 0.9;
+            font-size: 0.95em;
+        }
+
+        .upload-section {
+            padding: 40px;
+            text-align: center;
+            background: #f8f9fa;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 60px 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f0f0;
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8e8ff;
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-text {
+            font-size: 1.2em;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .editor-section {
+            display: none;
+            padding: 40px;
+        }
+
+        .editor-section.active {
+            display: block;
+        }
+
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            margin: 0 auto 30px;
+            display: flex;
+            justify-content: center;
+        }
+
+        #canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .crop-overlay {
+            position: absolute;
+            border: 3px solid #667eea;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+            cursor: move;
+        }
+
+        .resize-handle {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border: 3px solid #667eea;
+            border-radius: 50%;
+        }
+
+        .handle-nw { top: -10px; left: -10px; cursor: nw-resize; }
+        .handle-ne { top: -10px; right: -10px; cursor: ne-resize; }
+        .handle-sw { bottom: -10px; left: -10px; cursor: sw-resize; }
+        .handle-se { bottom: -10px; right: -10px; cursor: se-resize; }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .aspect-ratio-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .ratio-btn {
+            padding: 12px 30px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .ratio-btn:hover {
+            background: #f0f0ff;
+        }
+
+        .ratio-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .position-controls {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .position-label {
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .slider-group {
+            margin-bottom: 15px;
+        }
+
+        .slider-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+        }
+
+        .preview-section {
+            margin-top: 30px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+
+        .preview-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .preview-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .preview-label {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #667eea;
+            text-align: center;
+        }
+
+        .preview-canvas {
+            width: 100%;
+            height: auto;
+            border-radius: 5px;
+        }
+
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 15px 40px;
+            border: none;
+            border-radius: 25px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .btn-secondary:hover {
+            background: #f0f0ff;
+        }
+
+        .size-display {
+            margin-top: 10px;
+            font-size: 0.85em;
+            color: #666;
+            text-align: center;
+        }
+
+        .filename-input-group {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .filename-input-group label {
+            display: block;
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: 600;
+            font-size: 1em;
+        }
+
+        .filename-input-group input {
+            padding: 12px 20px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            font-size: 1em;
+            width: 100%;
+            max-width: 400px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .filename-input-group input:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .filename-input-group input::placeholder {
+            color: #999;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                border-radius: 0;
+            }
+
+            header {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+
+            .upload-section, .editor-section {
+                padding: 20px;
+            }
+
+            .aspect-ratio-buttons {
+                flex-direction: column;
+            }
+
+            .ratio-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📸 画像切り抜きツール</h1>
+            <p class="subtitle">1:1、16:9、9:16の3種類のアスペクト比で一括切り抜き</p>
+        </header>
+
+        <div class="upload-section" id="uploadSection">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">画像をドラッグ&ドロップ</div>
+                <div class="upload-hint">またはクリックして選択</div>
+                <input type="file" id="fileInput" accept="image/*">
+            </div>
+        </div>
+
+        <div class="editor-section" id="editorSection">
+            <div class="controls">
+                <div class="aspect-ratio-buttons">
+                    <button class="ratio-btn active" data-ratio="1:1">1:1 (正方形)</button>
+                    <button class="ratio-btn" data-ratio="16:9">16:9 (横長)</button>
+                    <button class="ratio-btn" data-ratio="9:16">9:16 (縦長)</button>
+                </div>
+
+                <div class="position-controls">
+                    <div class="position-label">切り抜き位置を調整</div>
+                    <div class="slider-group">
+                        <label for="posX">横位置</label>
+                        <input type="range" id="posX" min="0" max="100" value="50">
+                    </div>
+                    <div class="slider-group">
+                        <label for="posY">縦位置</label>
+                        <input type="range" id="posY" min="0" max="100" value="50">
+                    </div>
+                    <div class="slider-group">
+                        <label for="zoom">ズーム</label>
+                        <input type="range" id="zoom" min="10" max="100" value="100">
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <canvas id="canvas"></canvas>
+            </div>
+
+            <div class="preview-section">
+                <div class="preview-title">プレビュー</div>
+                <div class="preview-grid">
+                    <div class="preview-item">
+                        <div class="preview-label">1:1 (正方形)</div>
+                        <canvas class="preview-canvas" id="preview1"></canvas>
+                        <div class="size-display" id="size1"></div>
+                    </div>
+                    <div class="preview-item">
+                        <div class="preview-label">16:9 (横長)</div>
+                        <canvas class="preview-canvas" id="preview2"></canvas>
+                        <div class="size-display" id="size2"></div>
+                    </div>
+                    <div class="preview-item">
+                        <div class="preview-label">9:16 (縦長)</div>
+                        <canvas class="preview-canvas" id="preview3"></canvas>
+                        <div class="size-display" id="size3"></div>
+                    </div>
+                </div>
+
+                <div class="filename-input-group">
+                    <label for="filenameInput">ファイル名を入力（任意）</label>
+                    <input type="text" id="filenameInput" placeholder="未記入の場合は元のファイル名を使用">
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-primary" id="downloadBtn">すべてダウンロード</button>
+                    <button class="btn btn-secondary" id="newImageBtn">別の画像を選択</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        let originalImage = null;
+        let originalFileName = '';
+        let currentRatio = '1:1';
+        let cropSettings = {
+            '1:1': { x: 50, y: 50, zoom: 100 },
+            '16:9': { x: 50, y: 50, zoom: 100 },
+            '9:16': { x: 50, y: 50, zoom: 100 }
+        };
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadSection = document.getElementById('uploadSection');
+        const editorSection = document.getElementById('editorSection');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const posXSlider = document.getElementById('posX');
+        const posYSlider = document.getElementById('posY');
+        const zoomSlider = document.getElementById('zoom');
+        const ratioButtons = document.querySelectorAll('.ratio-btn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const newImageBtn = document.getElementById('newImageBtn');
+        const filenameInput = document.getElementById('filenameInput');
+
+        // アップロードエリアのイベント
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                loadImage(file);
+            }
+        });
+
+        // 画像読み込み
+        function loadImage(file) {
+            // ファイル名を保存（拡張子なし）
+            originalFileName = file.name.replace(/\.[^/.]+$/, '');
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    uploadSection.style.display = 'none';
+                    editorSection.classList.add('active');
+
+                    // ファイル名入力欄にデフォルト値を設定
+                    filenameInput.placeholder = `未記入の場合は "${originalFileName}" を使用`;
+
+                    initCanvas();
+                    updatePreview();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // キャンバス初期化
+        function initCanvas() {
+            const maxWidth = editorSection.clientWidth - 80;
+            const scale = maxWidth / originalImage.width;
+            canvas.width = originalImage.width * scale;
+            canvas.height = originalImage.height * scale;
+            drawCanvas();
+        }
+
+        // キャンバス描画
+        function drawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+
+            // 切り抜き範囲の表示
+            const cropArea = calculateCropArea(currentRatio, canvas.width, canvas.height);
+
+            // オーバーレイ
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+
+            // 枠線
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+
+            // グリッドライン
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(cropArea.x + cropArea.width * i / 3, cropArea.y);
+                ctx.lineTo(cropArea.x + cropArea.width * i / 3, cropArea.y + cropArea.height);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(cropArea.x, cropArea.y + cropArea.height * i / 3);
+                ctx.lineTo(cropArea.x + cropArea.width, cropArea.y + cropArea.height * i / 3);
+                ctx.stroke();
+            }
+        }
+
+        // 切り抜き範囲計算
+        function calculateCropArea(ratio, canvasWidth, canvasHeight) {
+            const settings = cropSettings[ratio];
+            const zoomFactor = settings.zoom / 100;
+
+            let width, height;
+            const [w, h] = ratio.split(':').map(Number);
+            const aspectRatio = w / h;
+
+            if (canvasWidth / canvasHeight > aspectRatio) {
+                height = canvasHeight * zoomFactor;
+                width = height * aspectRatio;
+            } else {
+                width = canvasWidth * zoomFactor;
+                height = width / aspectRatio;
+            }
+
+            const maxX = canvasWidth - width;
+            const maxY = canvasHeight - height;
+            const x = (maxX * settings.x / 100);
+            const y = (maxY * settings.y / 100);
+
+            return { x, y, width, height };
+        }
+
+        // プレビュー更新
+        function updatePreview() {
+            const ratios = ['1:1', '16:9', '9:16'];
+            const previewCanvases = [
+                document.getElementById('preview1'),
+                document.getElementById('preview2'),
+                document.getElementById('preview3')
+            ];
+            const sizeDisplays = [
+                document.getElementById('size1'),
+                document.getElementById('size2'),
+                document.getElementById('size3')
+            ];
+
+            ratios.forEach((ratio, index) => {
+                const previewCanvas = previewCanvases[index];
+                const previewCtx = previewCanvas.getContext('2d');
+
+                // プレビューサイズ設定
+                const maxPreviewSize = 400;
+                const [w, h] = ratio.split(':').map(Number);
+                const aspectRatio = w / h;
+
+                let previewWidth, previewHeight;
+                if (aspectRatio > 1) {
+                    previewWidth = maxPreviewSize;
+                    previewHeight = maxPreviewSize / aspectRatio;
+                } else {
+                    previewHeight = maxPreviewSize;
+                    previewWidth = maxPreviewSize * aspectRatio;
+                }
+
+                previewCanvas.width = previewWidth;
+                previewCanvas.height = previewHeight;
+
+                // 切り抜き範囲を計算
+                const settings = cropSettings[ratio];
+                const zoomFactor = settings.zoom / 100;
+
+                let cropWidth, cropHeight;
+                if (originalImage.width / originalImage.height > aspectRatio) {
+                    cropHeight = originalImage.height * zoomFactor;
+                    cropWidth = cropHeight * aspectRatio;
+                } else {
+                    cropWidth = originalImage.width * zoomFactor;
+                    cropHeight = cropWidth / aspectRatio;
+                }
+
+                const maxX = originalImage.width - cropWidth;
+                const maxY = originalImage.height - cropHeight;
+                const cropX = maxX * settings.x / 100;
+                const cropY = maxY * settings.y / 100;
+
+                // 切り抜いて描画
+                previewCtx.drawImage(
+                    originalImage,
+                    cropX, cropY, cropWidth, cropHeight,
+                    0, 0, previewWidth, previewHeight
+                );
+
+                // サイズ表示
+                sizeDisplays[index].textContent = `${Math.round(cropWidth)} × ${Math.round(cropHeight)} px`;
+            });
+        }
+
+        // アスペクト比ボタン
+        ratioButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                ratioButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentRatio = btn.dataset.ratio;
+
+                // 現在の設定を復元
+                const settings = cropSettings[currentRatio];
+                posXSlider.value = settings.x;
+                posYSlider.value = settings.y;
+                zoomSlider.value = settings.zoom;
+
+                drawCanvas();
+            });
+        });
+
+        // スライダーイベント
+        posXSlider.addEventListener('input', (e) => {
+            cropSettings[currentRatio].x = parseInt(e.target.value);
+            drawCanvas();
+            updatePreview();
+        });
+
+        posYSlider.addEventListener('input', (e) => {
+            cropSettings[currentRatio].y = parseInt(e.target.value);
+            drawCanvas();
+            updatePreview();
+        });
+
+        zoomSlider.addEventListener('input', (e) => {
+            cropSettings[currentRatio].zoom = parseInt(e.target.value);
+            drawCanvas();
+            updatePreview();
+        });
+
+        // ダウンロード
+        downloadBtn.addEventListener('click', async () => {
+            // ファイル名を取得（未記入の場合は元のファイル名を使用）
+            let baseFileName = filenameInput.value.trim();
+            if (!baseFileName) {
+                baseFileName = originalFileName;
+            }
+
+            const zip = new JSZip();
+            const ratios = ['1:1', '16:9', '9:16'];
+            const suffixes = ['square', 'landscape', 'portrait'];
+
+            for (let i = 0; i < ratios.length; i++) {
+                const ratio = ratios[i];
+                const suffix = suffixes[i];
+                const settings = cropSettings[ratio];
+
+                // 高解像度で切り抜き
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                const [w, h] = ratio.split(':').map(Number);
+                const aspectRatio = w / h;
+                const zoomFactor = settings.zoom / 100;
+
+                let cropWidth, cropHeight;
+                if (originalImage.width / originalImage.height > aspectRatio) {
+                    cropHeight = originalImage.height * zoomFactor;
+                    cropWidth = cropHeight * aspectRatio;
+                } else {
+                    cropWidth = originalImage.width * zoomFactor;
+                    cropHeight = cropWidth / aspectRatio;
+                }
+
+                canvas.width = cropWidth;
+                canvas.height = cropHeight;
+
+                const maxX = originalImage.width - cropWidth;
+                const maxY = originalImage.height - cropHeight;
+                const cropX = maxX * settings.x / 100;
+                const cropY = maxY * settings.y / 100;
+
+                ctx.drawImage(
+                    originalImage,
+                    cropX, cropY, cropWidth, cropHeight,
+                    0, 0, cropWidth, cropHeight
+                );
+
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                zip.file(`${baseFileName}_${suffix}_${ratio.replace(':', 'x')}.png`, blob);
+            }
+
+            const content = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(content);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${baseFileName}_cropped.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // 新しい画像
+        newImageBtn.addEventListener('click', () => {
+            editorSection.classList.remove('active');
+            uploadSection.style.display = 'block';
+            fileInput.value = '';
+            originalImage = null;
+            originalFileName = '';
+            filenameInput.value = '';
+            filenameInput.placeholder = '未記入の場合は元のファイル名を使用';
+            cropSettings = {
+                '1:1': { x: 50, y: 50, zoom: 100 },
+                '16:9': { x: 50, y: 50, zoom: 100 },
+                '9:16': { x: 50, y: 50, zoom: 100 }
+            };
+            currentRatio = '1:1';
+            ratioButtons.forEach((btn, i) => {
+                if (i === 0) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+        });
+    </script>
+</body>
+</html>
