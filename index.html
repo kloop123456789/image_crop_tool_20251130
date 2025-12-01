@@ -112,6 +112,7 @@
             height: auto;
             border-radius: 10px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            cursor: move;
         }
 
         .crop-overlay {
@@ -438,7 +439,8 @@
                 </div>
 
                 <div class="action-buttons">
-                    <button class="btn btn-primary" id="downloadBtn">すべてダウンロード</button>
+                    <button class="btn btn-primary" id="downloadBtn">ZIPでまとめてダウンロード</button>
+                    <button class="btn btn-primary" id="downloadIndividualBtn">3枚連続ダウンロード</button>
                     <button class="btn btn-secondary" id="newImageBtn">別の画像を選択</button>
                 </div>
             </div>
@@ -467,8 +469,16 @@
         const zoomSlider = document.getElementById('zoom');
         const ratioButtons = document.querySelectorAll('.ratio-btn');
         const downloadBtn = document.getElementById('downloadBtn');
+        const downloadIndividualBtn = document.getElementById('downloadIndividualBtn');
         const newImageBtn = document.getElementById('newImageBtn');
         const filenameInput = document.getElementById('filenameInput');
+
+        // マウスドラッグ用の変数
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragStartPosX = 0;
+        let dragStartPosY = 0;
 
         // アップロードエリアのイベント
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -529,6 +539,68 @@
             canvas.width = originalImage.width * scale;
             canvas.height = originalImage.height * scale;
             drawCanvas();
+            setupCanvasDrag();
+        }
+
+        // キャンバスドラッグ設定
+        function setupCanvasDrag() {
+            canvas.addEventListener('mousedown', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                // クリック位置が切り抜き範囲内かチェック
+                const cropArea = calculateCropArea(currentRatio, canvas.width, canvas.height);
+                if (x >= cropArea.x && x <= cropArea.x + cropArea.width &&
+                    y >= cropArea.y && y <= cropArea.y + cropArea.height) {
+                    isDragging = true;
+                    dragStartX = x;
+                    dragStartY = y;
+                    dragStartPosX = cropSettings[currentRatio].x;
+                    dragStartPosY = cropSettings[currentRatio].y;
+                    canvas.style.cursor = 'grabbing';
+                }
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+
+                    const deltaX = x - dragStartX;
+                    const deltaY = y - dragStartY;
+
+                    const cropArea = calculateCropArea(currentRatio, canvas.width, canvas.height);
+                    const maxX = canvas.width - cropArea.width;
+                    const maxY = canvas.height - cropArea.height;
+
+                    // パーセンテージに変換
+                    const newPosX = dragStartPosX + (deltaX / maxX) * 100;
+                    const newPosY = dragStartPosY + (deltaY / maxY) * 100;
+
+                    // 範囲制限
+                    cropSettings[currentRatio].x = Math.max(0, Math.min(100, newPosX));
+                    cropSettings[currentRatio].y = Math.max(0, Math.min(100, newPosY));
+
+                    // スライダーも更新
+                    posXSlider.value = cropSettings[currentRatio].x;
+                    posYSlider.value = cropSettings[currentRatio].y;
+
+                    drawCanvas();
+                    updatePreview();
+                }
+            });
+
+            canvas.addEventListener('mouseup', () => {
+                isDragging = false;
+                canvas.style.cursor = 'move';
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                isDragging = false;
+                canvas.style.cursor = 'move';
+            });
         }
 
         // キャンバス描画
@@ -691,7 +763,43 @@
             updatePreview();
         });
 
-        // ダウンロード
+        // 切り抜き画像を生成する共通関数
+        function generateCroppedImage(ratio, suffix) {
+            const settings = cropSettings[ratio];
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            const [w, h] = ratio.split(':').map(Number);
+            const aspectRatio = w / h;
+            const zoomFactor = settings.zoom / 100;
+
+            let cropWidth, cropHeight;
+            if (originalImage.width / originalImage.height > aspectRatio) {
+                cropHeight = originalImage.height * zoomFactor;
+                cropWidth = cropHeight * aspectRatio;
+            } else {
+                cropWidth = originalImage.width * zoomFactor;
+                cropHeight = cropWidth / aspectRatio;
+            }
+
+            canvas.width = cropWidth;
+            canvas.height = cropHeight;
+
+            const maxX = originalImage.width - cropWidth;
+            const maxY = originalImage.height - cropHeight;
+            const cropX = maxX * settings.x / 100;
+            const cropY = maxY * settings.y / 100;
+
+            ctx.drawImage(
+                originalImage,
+                cropX, cropY, cropWidth, cropHeight,
+                0, 0, cropWidth, cropHeight
+            );
+
+            return canvas;
+        }
+
+        // ZIPダウンロード
         downloadBtn.addEventListener('click', async () => {
             // ファイル名を取得（未記入の場合は元のファイル名を使用）
             let baseFileName = filenameInput.value.trim();
@@ -706,38 +814,7 @@
             for (let i = 0; i < ratios.length; i++) {
                 const ratio = ratios[i];
                 const suffix = suffixes[i];
-                const settings = cropSettings[ratio];
-
-                // 高解像度で切り抜き
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-
-                const [w, h] = ratio.split(':').map(Number);
-                const aspectRatio = w / h;
-                const zoomFactor = settings.zoom / 100;
-
-                let cropWidth, cropHeight;
-                if (originalImage.width / originalImage.height > aspectRatio) {
-                    cropHeight = originalImage.height * zoomFactor;
-                    cropWidth = cropHeight * aspectRatio;
-                } else {
-                    cropWidth = originalImage.width * zoomFactor;
-                    cropHeight = cropWidth / aspectRatio;
-                }
-
-                canvas.width = cropWidth;
-                canvas.height = cropHeight;
-
-                const maxX = originalImage.width - cropWidth;
-                const maxY = originalImage.height - cropHeight;
-                const cropX = maxX * settings.x / 100;
-                const cropY = maxY * settings.y / 100;
-
-                ctx.drawImage(
-                    originalImage,
-                    cropX, cropY, cropWidth, cropHeight,
-                    0, 0, cropWidth, cropHeight
-                );
+                const canvas = generateCroppedImage(ratio, suffix);
 
                 const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
                 zip.file(`${baseFileName}_${suffix}_${ratio.replace(':', 'x')}.png`, blob);
@@ -750,6 +827,35 @@
             a.download = `${baseFileName}_cropped.zip`;
             a.click();
             URL.revokeObjectURL(url);
+        });
+
+        // 個別連続ダウンロード
+        downloadIndividualBtn.addEventListener('click', async () => {
+            // ファイル名を取得（未記入の場合は元のファイル名を使用）
+            let baseFileName = filenameInput.value.trim();
+            if (!baseFileName) {
+                baseFileName = originalFileName;
+            }
+
+            const ratios = ['1:1', '16:9', '9:16'];
+            const suffixes = ['square', 'landscape', 'portrait'];
+
+            for (let i = 0; i < ratios.length; i++) {
+                const ratio = ratios[i];
+                const suffix = suffixes[i];
+                const canvas = generateCroppedImage(ratio, suffix);
+
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${baseFileName}_${suffix}_${ratio.replace(':', 'x')}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                // ブラウザが処理できるように少し待機
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
         });
 
         // 新しい画像
